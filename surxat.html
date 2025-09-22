@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SurxRAT Demo — SAFE Simulator</title>
+<style>
+  :root{--bg:#0f1724;--card:#111827;--muted:#9ca3af;--accent:#60a5fa}
+  body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial; margin:0; background:linear-gradient(180deg,#071029 0%, #071b2b 100%); color:#e6eef8}
+  header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid rgba(255,255,255,0.03)}
+  h1{font-size:18px;margin:0}
+  .container{display:grid;grid-template-columns:320px 1fr;gap:18px;padding:18px}
+  .card{background:rgba(255,255,255,0.02);border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+  .devices{height:72vh;overflow:auto}
+  .device{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;margin-bottom:8px;cursor:pointer}
+  .device:hover{background:rgba(255,255,255,0.02)}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .online{background:#34d399}
+  .offline{background:#f97316}
+  .main-top{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:inherit;cursor:pointer}
+  button.primary{border-color:rgba(96,165,250,0.9);background:linear-gradient(90deg,rgba(96,165,250,0.12),rgba(96,165,250,0.06))}
+  .log{height:56vh;overflow:auto;font-family:monospace;background:rgba(0,0,0,0.12);padding:10px;border-radius:8px}
+  .meta{color:var(--muted);font-size:13px}
+  .footer{padding:12px 18px;color:var(--muted);font-size:13px;text-align:center}
+  .small{font-size:13px;color:var(--muted)}
+  .kbd{background:#0b1220;padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);font-family:monospace}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>SurxRAT — Demo UI (SAFE Simulator)</h1>
+    <div class="meta">Hanya simulasi. Tidak ada akses nyata ke perangkat.</div>
+  </div>
+  <div class="meta">Demo v1 — Untuk pengujian UI & penanganan insiden</div>
+</header>
+
+<section class="container">
+  <!-- Sidebar -->
+  <aside class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <strong>Perangkat</strong>
+      <span class="small">Klik untuk pilih</span>
+    </div>
+    <div class="devices" id="deviceList">
+      <!-- devices injected by JS -->
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button id="addDeviceBtn">+ Tambah Device Dummy</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+
+    <hr style="margin:12px 0;border-color:rgba(255,255,255,0.03)">
+
+    <div class="small">Panduan singkat:</div>
+    <ul style="padding-left:18px;color:var(--muted);font-size:13px">
+      <li>Semua aksi hanya mensimulasikan hasil.</li>
+      <li>Gunakan untuk latihan UI, demo, penanganan insiden.</li>
+      <li>Jangan gunakan untuk menyebarkan software berbahaya.</li>
+    </ul>
+  </aside>
+
+  <!-- Main -->
+  <main>
+    <div class="card">
+      <div class="main-top">
+        <div>
+          <strong id="selectedTitle">Pilih perangkat</strong>
+          <div class="meta" id="selectedMeta">Tidak ada perangkat terpilih</div>
+        </div>
+        <div style="margin-left:auto" class="actions">
+          <button class="primary" id="simSMS">Sim. Ambil SMS</button>
+          <button id="simCalls">Sim. Log Panggilan</button>
+          <button id="simPhoto">Sim. Ambil Foto</button>
+          <button id="simRecord">Sim. Rekam Suara</button>
+          <button id="simLocation">Sim. Lokasi</button>
+          <button id="exportLog">Export Log</button>
+          <button id="clearLog">Hapus Log</button>
+        </div>
+      </div>
+
+      <div class="log" id="logArea" aria-live="polite">
+        <!-- logs -->
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="card">
+      <strong>Detail Device (simulasi)</strong>
+      <div id="deviceDetails" style="margin-top:8px;color:var(--muted)">
+        Pilih perangkat untuk melihat detail simulasi.
+      </div>
+    </div>
+  </main>
+</section>
+
+<div class="footer">
+  <div>Demo aman — tidak melakukan operasi berbahaya. Gunakan hanya untuk latihan/pengujian pada perangkat sendiri.</div>
+</div>
+
+<script>
+/* SAFE Simulator JS
+   - semua aksi hanya menambahkan entri log palsu
+   - data disimpan di localStorage (hanya browser lokal)
+*/
+const deviceListEl = document.getElementById('deviceList');
+const logArea = document.getElementById('logArea');
+const selectedTitle = document.getElementById('selectedTitle');
+const selectedMeta = document.getElementById('selectedMeta');
+const deviceDetails = document.getElementById('deviceDetails');
+
+let devices = JSON.parse(localStorage.getItem('sim_devices') || 'null');
+let logs = JSON.parse(localStorage.getItem('sim_logs') || '[]');
+let selectedId = localStorage.getItem('sim_selected') || null;
+
+if(!devices){
+  devices = [
+    { id: 'dev-01', name: 'Pixel-Demo', status: 'online', lastSeen: new Date().toISOString() },
+    { id: 'dev-02', name: 'Galaxy-Sim', status: 'offline', lastSeen: new Date(Date.now()-3600e3).toISOString() }
+  ];
+  localStorage.setItem('sim_devices', JSON.stringify(devices));
+}
+
+function saveState(){
+  localStorage.setItem('sim_devices', JSON.stringify(devices));
+  localStorage.setItem('sim_logs', JSON.stringify(logs));
+  if(selectedId) localStorage.setItem('sim_selected', selectedId);
+  render();
+}
+
+function renderDevices(){
+  deviceListEl.innerHTML = '';
+  devices.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'device';
+    el.dataset.id = d.id;
+    el.innerHTML = `<div style="display:flex;flex-direction:column">
+                      <div style="font-weight:600">${d.name}</div>
+                      <div class="meta" style="font-size:12px">${d.id} · last ${timeAgo(new Date(d.lastSeen))}</div>
+                    </div>
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                      <div class="dot ${d.status==='online' ? 'online':'offline'}"></div>
+                    </div>`;
+    el.onclick = ()=>{ selectedId = d.id; saveState(); };
+    deviceListEl.appendChild(el);
+  });
+}
+
+function renderLogs(){
+  logArea.innerHTML = '';
+  const shown = logs.slice().reverse();
+  shown.forEach(l=>{
+    const el = document.createElement('div');
+    el.style.padding='6px 0';
+    el.innerHTML = `<div style="font-size:13px"><strong>[${l.deviceId}]</strong> ${l.action}</div>
+                    <div class="meta" style="font-size:12px">${new Date(l.time).toLocaleString()} — ${l.detail || ''}</div>`;
+    logArea.appendChild(el);
+  });
+}
+
+function renderSelected(){
+  if(!selectedId){
+    selectedTitle.textContent = 'Pilih perangkat';
+    selectedMeta.textContent = 'Tidak ada perangkat terpilih';
+    deviceDetails.innerHTML = 'Pilih perangkat di daftar kiri untuk melihat detail simulasi.';
+    return;
+  }
+  const dev = devices.find(d=>d.id===selectedId);
+  if(!dev) return;
+  selectedTitle.textContent = dev.name;
+  selectedMeta.textContent = dev.id + ' · ' + (dev.status==='online' ? 'Online' : 'Offline');
+  deviceDetails.innerHTML = `
+    <ul style="padding-left:18px;color:var(--muted)">
+      <li>Model: <span class="small">${dev.name}</span></li>
+      <li>Status: <span class="small">${dev.status}</span></li>
+      <li>Last seen: <span class="small">${new Date(dev.lastSeen).toLocaleString()}</span></li>
+      <li>Izin simulasi: SMS (sim), Kamera (sim), Mikrofon (sim)</li>
+    </ul>
+  `;
+}
+
+function render(){ renderDevices(); renderLogs(); renderSelected(); }
+
+function timeAgo(d){
+  const s = Math.floor((Date.now()-d.getTime())/1000);
+  if(s<60) return `${s}s ago`;
+  if(s<3600) return `${Math.floor(s/60)}m ago`;
+  if(s<86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function addLog(deviceId, action, detail){
+  logs.push({ deviceId, action, detail, time: new Date().toISOString() });
+  localStorage.setItem('sim_logs', JSON.stringify(logs));
+  renderLogs();
+}
+
+/* Simulated actions */
+function simulate(action){
+  if(!selectedId){ alert('Pilih perangkat dari daftar kiri dulu.'); return; }
+  const dev = devices.find(d=>d.id===selectedId);
+  if(!dev){ alert('Perangkat tidak ditemukan.'); return; }
+
+  switch(action){
+    case 'sms':
+      addLog(dev.id, 'Simulated: Fetch SMS', 'Menemukan 3 pesan (semua palsu).');
+      alert('Simulasi: 3 SMS ditemukan. (Hanya demo, bukan data nyata.)');
+      break;
+    case 'calls':
+      addLog(dev.id, 'Simulated: Fetch Call Logs', '3 panggilan terakhir (palsu).');
+      alert('Simulasi: log panggilan ditambahkan.');
+      break;
+    case 'photo':
+      addLog(dev.id, 'Simulated: Capture Photo', 'Gambar dummy diambil dan disimpan.');
+      alert('Simulasi: foto diambil (dummy).');
+      break;
+    case 'record':
+      addLog(dev.id, 'Simulated: Start Recording', 'Rekaman dummy 12s disimpan.');
+      alert('Simulasi: merekam suara selama 12 detik (dummy).');
+      break;
+    case 'location':
+      addLog(dev.id, 'Simulated: Get Location', 'Koordinat palsu: -6.200000, 106.816666');
+      alert('Simulasi: lokasi diperoleh (contoh koordinat Jakarta).');
+      break;
+  }
+}
+
+/* UI controls */
+document.getElementById('simSMS').onclick = ()=>simulate('sms');
+document.getElementById('simCalls').onclick = ()=>simulate('calls');
+document.getElementById('simPhoto').onclick = ()=>simulate('photo');
+document.getElementById('simRecord').onclick = ()=>simulate('record');
+document.getElementById('simLocation').onclick = ()=>simulate('location');
+
+document.getElementById('addDeviceBtn').onclick = ()=>{
+  const id = 'dev-' + Math.random().toString(36).slice(2,8);
+  const name = prompt('Nama device (contoh: Redmi-Tester):', 'Device-'+id.slice(-3));
+  devices.push({ id, name: name||('Device-'+id.slice(-3)), status: Math.random()>0.4 ? 'online':'offline', lastSeen: new Date().toISOString() });
+  saveState();
+};
+
+document.getElementById('resetBtn').onclick = ()=>{
+  if(confirm('Reset semua data simulasi?')) {
+    localStorage.removeItem('sim_devices');
+    localStorage.removeItem('sim_logs');
+    localStorage.removeItem('sim_selected');
+    location.reload();
+  }
+};
+
+document.getElementById('clearLog').onclick = ()=>{
+  if(confirm('Hapus semua log simulasi?')){ logs=[]; localStorage.setItem('sim_logs','[]'); renderLogs(); }
+};
+
+document.getElementById('exportLog').onclick = ()=>{
+  const blob = new Blob([JSON.stringify({ devices, logs }, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'sim_logs_'+(new Date().toISOString().slice(0,19)).replace(/[:T]/g,'-')+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+/* initial render */
+render();
+</script>
+</body>
+</html>gambar <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
